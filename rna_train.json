@@ -1,0 +1,362 @@
+[
+  {
+    "structure": "...((....)).",
+    "sequence": "CCCGCAAUUGCC"
+  },
+  {
+    "structure": ".....(((........))).",
+    "sequence": "GUGUUGCCCCCUUCAUGGCG"
+  },
+  {
+    "structure": ".......((((...)))).",
+    "sequence": "GUAUAGCGUCUUAUAGAUC"
+  },
+  {
+    "structure": "..((((....)))).",
+    "sequence": "CAAGUAGGUAUACUG"
+  },
+  {
+    "structure": ".((.......))........",
+    "sequence": "GGCAUCAUUAGCGGCUUCUC"
+  },
+  {
+    "structure": "...((....))..",
+    "sequence": "GUAGCUGAGGCGG"
+  },
+  {
+    "structure": "..(((....)))",
+    "sequence": "GACCUGUGGGGG"
+  },
+  {
+    "structure": ".((((....))))..",
+    "sequence": "CGGACUAGGGUCCAG"
+  },
+  {
+    "structure": ".(((......)))....",
+    "sequence": "CCUGGUAGUACAGAUUA"
+  },
+  {
+    "structure": "..((((.......))))...",
+    "sequence": "AUGAAUACCACUCGUUCUUU"
+  },
+  {
+    "structure": "((.......)).",
+    "sequence": "GGCCCAUAACCG"
+  },
+  {
+    "structure": "..(((.......)))...",
+    "sequence": "AGGCGGCCAUAACGCACU"
+  },
+  {
+    "structure": "((..............))..",
+    "sequence": "GCGAAGACGGUUAUAGGCGA"
+  },
+  {
+    "structure": "((.(....).))....",
+    "sequence": "CCUCUUCUGCGGCCUC"
+  },
+  {
+    "structure": ".((((......)))).",
+    "sequence": "AUUGAUCGCACUCAAG"
+  },
+  {
+    "structure": "...(((.....)))......",
+    "sequence": "UACGAGGUCAACUCCGCCGA"
+  },
+  {
+    "structure": ".......((((....)))).",
+    "sequence": "GUAUGUACAUCUCGAGAUGA"
+  },
+  {
+    "structure": "((((......))))....",
+    "sequence": "UCACAACAUAGUGAUACG"
+  },
+  {
+    "structure": "..((.(......).)).",
+    "sequence": "AUGAGUGAUGAAAGUCU"
+  },
+  {
+    "structure": ".....((((....))))",
+    "sequence": "CUGACUGUGGUUCCACA"
+  },
+  {
+    "structure": ".(((....))).........",
+    "sequence": "GUGUGUCGACAGCAAACCCC"
+  },
+  {
+    "structure": "..(((......)))",
+    "sequence": "UUGCUCCGACAAGC"
+  },
+  {
+    "structure": "..(((....)))..",
+    "sequence": "GGAGGUUUUCCUAC"
+  },
+  {
+    "structure": ".(.((((...)))).)...",
+    "sequence": "AGGGUCAAGUUGGCGCAGA"
+  },
+  {
+    "structure": "((((......))))......",
+    "sequence": "CCUGUAUUUCCGGGGGAGAU"
+  },
+  {
+    "structure": "(((......)))....",
+    "sequence": "CUCGUAAAAGGGCAGU"
+  },
+  {
+    "structure": ".((.....)).......",
+    "sequence": "UCCGAAGAGGGCGCCAU"
+  },
+  {
+    "structure": "....(((....)))....",
+    "sequence": "UCCCCGCCUGCGUGACGU"
+  },
+  {
+    "structure": "((.....)).",
+    "sequence": "CCGAUAAGGC"
+  },
+  {
+    "structure": "....((....))..",
+    "sequence": "GUAUGCUGACGCUC"
+  },
+  {
+    "structure": "(((((....)))))",
+    "sequence": "GAAGUCGGGACUUC"
+  },
+  {
+    "structure": "(((.....))).....",
+    "sequence": "UCCCGCGUGGACUAAC"
+  },
+  {
+    "structure": ".....((......))..",
+    "sequence": "AGUUAGGGCUGCUCCGA"
+  },
+  {
+    "structure": "((.(((....))).))...",
+    "sequence": "UGUAGACAAUUCUUCAUGU"
+  },
+  {
+    "structure": "((((...)))).....",
+    "sequence": "GAGGUCCCCUUUACUC"
+  },
+  {
+    "structure": ".(((....))).",
+    "sequence": "CGUAGUAAUACA"
+  },
+  {
+    "structure": ".(((.....))).......",
+    "sequence": "GUGCCCGUCGCAAAAGUGC"
+  },
+  {
+    "structure": ".(((..(....)..)))",
+    "sequence": "GACCAACAGGCGCGGGU"
+  },
+  {
+    "structure": "...((.(((...))).)).",
+    "sequence": "GAUUAGACGUGCCGUGUGC"
+  },
+  {
+    "structure": "(((.........))).",
+    "sequence": "CCCAAAUCGACCGGGA"
+  },
+  {
+    "structure": "((((....))))....",
+    "sequence": "GGACCGCCGUCUGAUA"
+  },
+  {
+    "structure": "....(((.....)))..",
+    "sequence": "CACGAGGCCAUUCCUGA"
+  },
+  {
+    "structure": "...(((....))).......",
+    "sequence": "ACGGACAUAUGUCGUGCAGC"
+  },
+  {
+    "structure": "......((((....))))",
+    "sequence": "UGCACAAUGCUUUUGCAU"
+  },
+  {
+    "structure": "..((((.((....)))))).",
+    "sequence": "GACACAUGAUCAAUCUGUGA"
+  },
+  {
+    "structure": ".....((((....))))..",
+    "sequence": "ACCUAAGGCGAUGGUUUAU"
+  },
+  {
+    "structure": "......((((...))))...",
+    "sequence": "ACACCUAGCGAUUCGCUUAC"
+  },
+  {
+    "structure": "((((....)))).",
+    "sequence": "CGUAGUGAUACGC"
+  },
+  {
+    "structure": "....((((....)))).",
+    "sequence": "AUGCACUGCUCGCGGUC"
+  },
+  {
+    "structure": "((((....)).))..",
+    "sequence": "GCCGGGCCCGCGUAU"
+  },
+  {
+    "structure": "((((...))))......",
+    "sequence": "GCCCUUAGGGUACCUCG"
+  },
+  {
+    "structure": "(((.....))).......",
+    "sequence": "GGGUUCGUCUCACAGCAC"
+  },
+  {
+    "structure": ".((((.(......)))))",
+    "sequence": "GAUCUACGUAUGGGAGAU"
+  },
+  {
+    "structure": "..((....))..",
+    "sequence": "ACCCCCGAGGAU"
+  },
+  {
+    "structure": "...(((.......)))...",
+    "sequence": "CGAAGUGUUUCAAGCUGAU"
+  },
+  {
+    "structure": "..(((.....)))...",
+    "sequence": "GGAGCGGCUAGUUAUG"
+  },
+  {
+    "structure": "(((....)))......",
+    "sequence": "CAGAUGACUGCACGGC"
+  },
+  {
+    "structure": "...((((......))))",
+    "sequence": "UCAGUGGGCUUGAUCGC"
+  },
+  {
+    "structure": "..(((((....)))))..",
+    "sequence": "CAUAUUCGUCAGGAUACU"
+  },
+  {
+    "structure": "...(((.......)))..",
+    "sequence": "UUUUGGUAGGGGUCCGCU"
+  },
+  {
+    "structure": "......(((.....))).",
+    "sequence": "CCUUUCGGCGCUGUGCCA"
+  },
+  {
+    "structure": "....((.((......)))).",
+    "sequence": "AGAACGUCGAGUGUCCGCGA"
+  },
+  {
+    "structure": "(((...........))).",
+    "sequence": "GGCAACGUCAUUGAGCUA"
+  },
+  {
+    "structure": "((((...))))...",
+    "sequence": "CCUCGCGGAGGGUC"
+  },
+  {
+    "structure": ".(((.....))).....",
+    "sequence": "CAGGUAGACCCUCACAA"
+  },
+  {
+    "structure": "..(((.......))).",
+    "sequence": "AACAGCCGUUCCCUGG"
+  },
+  {
+    "structure": ".((((...))))......",
+    "sequence": "AGACAGGUUGUCGGAGAA"
+  },
+  {
+    "structure": "((((....).))).",
+    "sequence": "GGGCUCAGGAUCCA"
+  },
+  {
+    "structure": "((((...))))....",
+    "sequence": "UUGGUUGCCAGUCCC"
+  },
+  {
+    "structure": ".........((....))..",
+    "sequence": "GAAACUCUUGGAACCCCGU"
+  },
+  {
+    "structure": ".(((((...))))).....",
+    "sequence": "GUCUGCGACGCGGGUACGU"
+  },
+  {
+    "structure": "....(((........)))..",
+    "sequence": "UAUCCGCAUCCCACGGCGAA"
+  },
+  {
+    "structure": "...((((...))))....",
+    "sequence": "AGCGGGCCCAGUCUCUAG"
+  },
+  {
+    "structure": "(((....)))..",
+    "sequence": "GACGCGAGUCUU"
+  },
+  {
+    "structure": "..(((........)))",
+    "sequence": "CAGACGACGACCGGUU"
+  },
+  {
+    "structure": "((....))....",
+    "sequence": "GCUAAUGCUCAG"
+  },
+  {
+    "structure": ".((((.....))))",
+    "sequence": "UCGGUCGACUACCG"
+  },
+  {
+    "structure": "((.(((......))))).",
+    "sequence": "GCGCGUCCCGAUACGGUG"
+  },
+  {
+    "structure": "(((........))).",
+    "sequence": "CAUUUGCUCGUGUGG"
+  },
+  {
+    "structure": "((....)).......",
+    "sequence": "GCAUUUGCCUCUUAA"
+  },
+  {
+    "structure": ".......(((...)))...",
+    "sequence": "AUAGUACUCCGGCGGAUGU"
+  },
+  {
+    "structure": "(((((....))))).....",
+    "sequence": "UCGGUGUGUGCUGGAGUGG"
+  },
+  {
+    "structure": ".((....))......",
+    "sequence": "CGCUCGUGCAGAACC"
+  },
+  {
+    "structure": ".(((......))).....",
+    "sequence": "AGUAGUUGGAUACAUGAA"
+  },
+  {
+    "structure": "...((((...))))",
+    "sequence": "AGGCCCAUCGUGGG"
+  },
+  {
+    "structure": "(((....))).....",
+    "sequence": "GAUGCUCGUCAACGC"
+  },
+  {
+    "structure": "((((......))))...",
+    "sequence": "GCCCCGCGAAGGGCUUA"
+  },
+  {
+    "structure": "..(((......)))...",
+    "sequence": "GCUCGUGGGAUCGACAA"
+  },
+  {
+    "structure": "....((......))......",
+    "sequence": "AACGCCGUAUUGGGACACCC"
+  },
+  {
+    "structure": "(((.....).)).......",
+    "sequence": "GCCUAUCUGAGCUCUUCAC"
+  }
+]
