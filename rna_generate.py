@@ -6,13 +6,13 @@ from tqdm import tqdm
 from collections import defaultdict
 
 # ---------- 参数配置 ----------
-MIN_LEN = 10
-MAX_LEN = 20
-TOTAL_STRUCTURES = 200000
+MIN_LEN = 80
+MAX_LEN = 120
+TOTAL_STRUCTURES = 2000000
 TRAIN_RATIO = 0.9
 RNAFOLD_CMD = "RNAfold"
 CHUNK_SIZE = 10000
-OUTPUT_DIR = "/pvc/rna_dataset/rna_generate"
+OUTPUT_DIR = "rna_dataset/rna_generate"
 
 # ---------- 工具函数 ----------
 def generate_random_rna_sequence(n):
