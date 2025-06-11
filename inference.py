@@ -19,7 +19,13 @@ vocab = {v: k for k, v in id_to_token.items()}
 rna_tokens = {3, 4, 5, 6}  # A, C, G, U
 def generate_rna_sequence(model, input_ids, rna_tokens, vocab, max_steps=256):
     rna_seq = ""
+    ctx_len = 256 # 安全 fallback
+
     for _ in range(max_steps):
+        # 保证不超过 ctx_len（第一次循环前 input_ids 通常很短）
+        if input_ids.shape[1] > ctx_len:
+            input_ids = input_ids[:, -ctx_len:]
+
         logits = model(input_ids)[:, -1, :]
         probs = torch.nn.functional.softmax(logits, dim=-1)
         next_token = torch.argmax(probs, dim=-1)
@@ -31,6 +37,7 @@ def generate_rna_sequence(model, input_ids, rna_tokens, vocab, max_steps=256):
             break
 
         input_ids = torch.cat([input_ids, next_token.unsqueeze(1)], dim=1)
+
     return rna_seq
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -398,36 +405,46 @@ if __name__ == "__main__":
     total_edit_distance = 0
     total_full_match = 0
     
+    from tqdm import tqdm
+
     # === 输出文件打开追加写入 ===
     with open(results_path, "a") as fout:
         for idx, sample in enumerate(tqdm(test_data)):
             structure = sample["structure"]
-    
+
             # 跳过已完成样本
             if structure in completed_structures:
                 continue
-    
+
             prompt = structure + "\n"
             input_ids = torch.tensor([[vocab[c] for c in prompt]], dtype=torch.long, device='cuda')
-    
+
+            # === 打印当前样本输入长度 ===
+            print(f"[Sample {idx}] input length = {input_ids.shape[1]}")
+
+            # === 检查并截断超长输入 ===
+            if input_ids.shape[1] > args.ctx_len:
+                print(f"[WARNING] Input length {input_ids.shape[1]} exceeds ctx_len {args.ctx_len}, truncating...")
+                input_ids = input_ids[:, -args.ctx_len:]
+
             with torch.no_grad():
                 pred_seq = generate_rna_sequence(model, input_ids, rna_tokens, vocab, args.ctx_len)
-    
+
             result = evaluate_prediction(pred_seq, structure)
             fout.write(json.dumps(result) + "\n")
             fout.flush()
-    
+
             total_correct += result["correct_rate"]
             total_edit_distance += result["edit_distance"]
             total_full_match += result["full_match"]
-    
+
             done_so_far = len(completed_structures) + 1
             if done_so_far % 10 == 0 or done_so_far == len(test_data):
                 avg_correct = total_correct / done_so_far
                 avg_edit_dist = total_edit_distance / done_so_far
                 full_match_ratio = total_full_match / done_so_far
                 print(f"[{done_so_far}/{len(test_data)}] Correct Rate: {avg_correct:.4f} | Edit Distance: {avg_edit_dist:.2f} | Full Match: {full_match_ratio:.4f}")
-    
+
             completed_structures.add(structure)
     
     # === 保存 summary 统计 ===

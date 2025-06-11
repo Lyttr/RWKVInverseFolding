@@ -3,16 +3,20 @@ import random
 import json
 import os
 from tqdm import tqdm
-from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datasets import load_dataset
 
 # ---------- 参数配置 ----------
-MIN_LEN = 10
-MAX_LEN = 20
-TOTAL_STRUCTURES = 200000
-TRAIN_RATIO = 0.9
-RNAFOLD_CMD = "RNAfold"
+MIN_LEN = 80
+MAX_LEN = 125
+TRAIN_SIZE = 2000000
 CHUNK_SIZE = 10000
-OUTPUT_DIR = "/pvc/rna_dataset/rna_generate"
+NUM_THREADS = 8
+RNAFOLD_CMD = "RNAfold"
+OUTPUT_DIR = "/home/gaji/rna_dataset"
+TEST_PATH = os.path.join(OUTPUT_DIR, "rna_test.json")
+TRAIN_DIR = os.path.join(OUTPUT_DIR, "train_chunks")
+MERGED_TRAIN_PATH = os.path.join(OUTPUT_DIR, "rna_train.json")
 
 # ---------- 工具函数 ----------
 def generate_random_rna_sequence(n):
@@ -38,74 +42,95 @@ def run_rnafold(seq):
     return None
 
 def is_valid_structure(dot):
-    if not dot:
-        return False
-    if set(dot) == {'.'}:
-        return False
-    return True
+    return bool(dot and set(dot) != {'.'})
 
 def save_json(data, path):
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-# ---------- 主生成函数 ----------
-def generate_dataset():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+def load_json(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, "r") as f:
+        return json.load(f)
 
-    dataset = []
-    count = 0
-    tries = 0
+# ---------- 数据生成 ----------
+def generate_and_validate(test_structures):
+    seq = generate_random_rna_sequence(random.randint(MIN_LEN, MAX_LEN))
+    dot = run_rnafold(seq)
+    if is_valid_structure(dot) and dot not in test_structures:
+        return {"sequence": seq, "structure": dot}
+    return None
 
-    with tqdm(total=TOTAL_STRUCTURES, desc="Generating", miniters=1000) as pbar:
-        while count < TOTAL_STRUCTURES and tries < TOTAL_STRUCTURES * 100:
-            tries += 1
-            length = random.randint(MIN_LEN, MAX_LEN)
-            seq = generate_random_rna_sequence(length)
-            dot = run_rnafold(seq)
+def generate_train_set(test_structures):
+    os.makedirs(TRAIN_DIR, exist_ok=True)
+    existing_chunks = sorted([f for f in os.listdir(TRAIN_DIR) if f.endswith(".json")])
+    completed = len(existing_chunks) * CHUNK_SIZE
+    print(f"📦 已存在训练集样本数: {completed}，目标总数: {TRAIN_SIZE}")
 
-            if dot and is_valid_structure(dot):
-                dataset.append({"structure": dot, "sequence": seq})
-                count += 1
-                pbar.update(1)
+    chunk_idx = len(existing_chunks)
 
-    print(f"✅ Finished generation: {count} samples after {tries} tries")
-    return dataset
+    with tqdm(total=TRAIN_SIZE, desc="生成训练集", initial=completed) as pbar:
+        while completed < TRAIN_SIZE:
+            train_data = []
+            with ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
+                futures = [executor.submit(generate_and_validate, test_structures) for _ in range(CHUNK_SIZE * 2)]
+                for future in as_completed(futures):
+                    item = future.result()
+                    if item:
+                        train_data.append(item)
+                        completed += 1
+                        pbar.update(1)
+                        if len(train_data) >= CHUNK_SIZE:
+                            break
 
-# ---------- 数据划分函数（结构级不重复） ----------
-def split_and_save(dataset):
-    struct_to_items = defaultdict(list)
-    for item in dataset:
-        struct_to_items[item["structure"]].append(item)
+            if train_data:
+                path = os.path.join(TRAIN_DIR, f"train_chunk_{chunk_idx:05d}.json")
+                save_json(train_data, path)
+                print(f"save to train_chunk_{chunk_idx:05d}.json")
+                chunk_idx += 1
 
-    all_structs = list(struct_to_items.keys())
-    random.shuffle(all_structs)
+    print(f"✅ 完成训练集生成，共 {TRAIN_SIZE} 条样本，存储在 {TRAIN_DIR}/")
 
-    cutoff = int(len(all_structs) * TRAIN_RATIO)
-    train_structs = set(all_structs[:cutoff])
-    test_structs = set(all_structs[cutoff:])
-
-    train = []
-    test = []
-
-    for s in train_structs:
-        train.extend(struct_to_items[s])
-    for s in test_structs:
-        test.extend(struct_to_items[s])
-
-    train_path = os.path.join(OUTPUT_DIR, "rna_train.json")
-    test_path = os.path.join(OUTPUT_DIR, "rna_test.json")
-    save_json(train, train_path)
-    save_json(test, test_path)
-
-    print(f"✅ Train samples: {len(train)} | Test samples: {len(test)}")
-    print(f"✅ Unique structures: Train: {len(train_structs)} | Test: {len(test_structs)}")
-    print(f"📂 Saved to: {train_path}, {test_path}")
+    # 合并所有 chunk
+    merged = []
+    print("🔄 正在合并所有训练集分块...")
+    for fname in sorted(os.listdir(TRAIN_DIR)):
+        if fname.endswith(".json"):
+            data = load_json(os.path.join(TRAIN_DIR, fname))
+            merged.extend(data)
+    save_json(merged, MERGED_TRAIN_PATH)
+    print(f"✅ 已合并为 {MERGED_TRAIN_PATH}，共 {len(merged)} 条样本")
 
 # ---------- 主函数 ----------
 def main():
-    print(f"Generating {TOTAL_STRUCTURES} structure-sequence pairs into: {OUTPUT_DIR}")
-    dataset = generate_dataset()
-    split_and_save(dataset)
+    # 加载 eternabench-cm 数据集
+    dataset = load_dataset("multimolecule/eternabench-cm")
+
+    # 合并 train 和 test 分区中的结构，过滤长度不超过 125，去重
+    structures = set()
+    structure_to_sequence = {}
+    for split in ["train", "test"]:
+        for entry in dataset[split]:
+            structure = entry['secondary_structure']
+            sequence = entry['sequence']
+            if len(structure) <= 125 and structure not in structures:
+                structures.add(structure)
+                structure_to_sequence[structure] = sequence
+
+    # 构造测试集，保证结构唯一
+    test_data = [
+        {"sequence": sequence, "structure": structure}
+        for structure, sequence in structure_to_sequence.items()
+    ]
+
+    # 保存测试集
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    save_json(test_data, TEST_PATH)
+    print(f"✅ 已保存测试集，共 {len(test_data)} 条样本，路径为 {TEST_PATH}")
+
+    # 生成训练集
+    generate_train_set(structures)
 
 if __name__ == "__main__":
     main()

@@ -13,11 +13,11 @@
 MODEL_TYPE="x052" # x060 => rwkv-6.0
 # MODEL_TYPE="mamba" # pip install mamba_ssm --upgrade
 #
-N_LAYER="6"
-N_EMBD="384"
+N_LAYER="8"
+N_EMBD="512"
 #
-CTX_LEN="64" # !!! change magic_prime if you change ctx_len !!!
-PROJ_DIR="/pvc/RWKV/out/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE # set output folder
+CTX_LEN="256" # !!! change magic_prime if you change ctx_len !!!
+PROJ_DIR="/home/gaji/RWKV/out/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE # set output folder
 #
 #######################################################################################################################
 #
@@ -27,8 +27,8 @@ PROJ_DIR="/pvc/RWKV/out/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE # set output folder
 # Larger model => use smaller LR
 # Finetuning => use very small LR, such as 1e-5
 #
-M_BSZ="8" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
-LR_INIT="1e-4"
+M_BSZ="32" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
+LR_INIT="5e-5"
 LR_FINAL="1e-5"
 GRAD_CP=0 # 1 => slower, save VRAM; 0 => faster, more VRAM
 EPOCH_SAVE=1 # save every 10 "miniepochs" (1 miniepoch = 40320 * ctx_len tokens) => decrease if your GPU is weak
@@ -45,8 +45,8 @@ DS_BUCKET_MB=2 # set to 2 for consumer GPUs, set to 200 for A100 / H100 (affects
 #
 python train.py --load_model "0" --wandb "rna-rwkv" --proj_dir $PROJ_DIR --my_testing $MODEL_TYPE \
  --ctx_len $CTX_LEN --my_pile_stage 3 --epoch_count 999999 --epoch_begin 0 \
- --data_file "/pvc/rna_dataset/rna_generate/rna_train_token_lines.npy" --my_exit_tokens 114800000 --magic_prime 1793731 \
+ --data_file "/home/gaji/rna_dataset/rna_train_token_lines.npy" --my_exit_tokens 2560000000 --magic_prime 9999991 \
  --num_nodes $N_NODE --micro_bsz $M_BSZ --n_layer $N_LAYER --n_embd $N_EMBD --pre_ffn 0 --head_qk 0 \
- --lr_init $LR_INIT --lr_final $LR_FINAL --warmup_steps 10 --beta1 0.9 --beta2 0.99 --adam_eps 1e-18 --my_pile_edecay 0 --data_type "numpy" --vocab_size 9 \
- --weight_decay 0.001 --epoch_save $EPOCH_SAVE --head_size_a 64 \
+ --lr_init $LR_INIT --lr_final $LR_FINAL --warmup_steps 50 --beta1 0.9 --beta2 0.99 --adam_eps 1e-18 --my_pile_edecay 0 --data_type "numpy" --vocab_size 9 \
+ --weight_decay 0.01 --epoch_save $EPOCH_SAVE --head_size_a 64 \
  --accelerator gpu --devices $GPU_PER_NODE --precision bf16 --strategy deepspeed_stage_2 --grad_cp $GRAD_CP --enable_progress_bar True --ds_bucket_mb $DS_BUCKET_MB

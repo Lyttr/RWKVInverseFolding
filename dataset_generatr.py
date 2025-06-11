@@ -3,9 +3,9 @@ import numpy as np
 import os
 
 # ---------- 配置 ----------
-INPUT_JSON = "/pvc/rna_dataset/rna_generate/rna_train.json"
-OUTPUT_NPY = "/pvc/rna_dataset/rna_generate/rna_train_token_lines.npy"
-CTX_LEN = 64
+INPUT_JSON = "/home/gaji/rna_dataset/rna_train.json"
+OUTPUT_NPY = "/home/gaji/rna_dataset/rna_train_token_lines.npy"
+CTX_LEN = 256
 PAD_ID = 8
 VOCAB = {
     ".": 0,
