@@ -1,4 +1,4 @@
-import os
+
 import torch
 from argparse import ArgumentParser
 import logging
@@ -10,114 +10,69 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.utilities import rank_zero_info, rank_zero_only
 import pytorch_lightning as pl
 import re
+import os, warnings, math, datetime, sys, time,random
+import numpy as np
+import json
+import subprocess
+from difflib import SequenceMatcher
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+from collections import defaultdict
 rank_zero_info("########## work in progress ##########")
-# 配置
 id_to_token = {
     0: '.', 1: '(', 2: ')', 3: 'A', 4: 'C', 5: 'G', 6: 'U', 7: '\n', 8: 'PAD'
 }
 vocab = {v: k for k, v in id_to_token.items()}
-rna_tokens = {3, 4, 5, 6}  # A, C, G, U
-def generate_rna_sequence(model, input_ids, rna_tokens, vocab, max_steps=256):
+rna_tokens = {3, 4, 5, 6}  
+def generate_rna_sequence(
+    model, input_ids, rna_tokens, vocab, id_to_token,
+    ctx_len=256, top_k=4, temperature=0.00001,
+    gc_target=0.5, gc_strength=1.0
+):
     rna_seq = ""
-    ctx_len = 256 # 安全 fallback
 
-    for _ in range(max_steps):
-        # 保证不超过 ctx_len（第一次循环前 input_ids 通常很短）
+    for i in range(ctx_len):
         if input_ids.shape[1] > ctx_len:
-            input_ids = input_ids[:, -ctx_len:]
+            break
 
-        logits = model(input_ids)[:, -1, :]
+        logits = model(input_ids)[:, -1, :]  
+        logits = logits / temperature
         probs = torch.nn.functional.softmax(logits, dim=-1)
-        next_token = torch.argmax(probs, dim=-1)
 
-        token_id = next_token.item()
+  
+        if len(rna_seq) > 0:
+            gc_count = rna_seq.count('G') + rna_seq.count('C')
+            gc_ratio = gc_count / len(rna_seq)
+
+     
+            for token_id in rna_tokens:
+                token = id_to_token[token_id]
+                if token in ['G', 'C']:
+                    if gc_ratio < gc_target:
+                        probs[0, token_id] *= gc_strength  # boost
+                    elif gc_ratio > gc_target:
+                        probs[0, token_id] /= gc_strength  # suppress
+
+           
+            probs = probs / probs.sum(dim=-1, keepdim=True)
+
+        topk_probs, topk_indices = torch.topk(probs, k=top_k, dim=-1)
+        topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
+        next_token = torch.multinomial(topk_probs, num_samples=1)
+        token_id = topk_indices[0, next_token.item()].item()
+
         if token_id in rna_tokens:
             rna_seq += id_to_token[token_id]
         elif token_id == vocab['PAD']:
             break
 
-        input_ids = torch.cat([input_ids, next_token.unsqueeze(1)], dim=1)
+        next_token_tensor = torch.tensor([[token_id]], dtype=torch.long, device=input_ids.device)
+        input_ids = torch.cat([input_ids, next_token_tensor], dim=1)
 
     return rna_seq
-if __name__ == "__main__":
-    parser = ArgumentParser()
-    parser.add_argument("--test_json", type=str, help="Path to test JSON file")
-    parser.add_argument("--output_json", type=str,  help="Path to save result JSON")
-    parser.add_argument("--load_model", default="", type=str)  # full path, with .pth
-    parser.add_argument("--wandb", default="", type=str)  # wandb project name. if "" then don't use wandb
-    parser.add_argument("--proj_dir", default="out", type=str)
-    parser.add_argument("--random_seed", default="-1", type=int)
-    parser.add_argument("--train_type", default="", type=str) # ""/"states"
-
-    parser.add_argument("--data_file", default="", type=str)
-    parser.add_argument("--data_type", default="utf-8", type=str)
-    parser.add_argument("--vocab_size", default=0, type=int)  # vocab_size = 0 means auto (for char-level LM and .txt data)
-
-    parser.add_argument("--ctx_len", default=1024, type=int)
-    parser.add_argument("--epoch_steps", default=1000, type=int)  # a mini "epoch" has [epoch_steps] steps
-    parser.add_argument("--epoch_count", default=500, type=int)  # train for this many "epochs". will continue afterwards with lr = lr_final
-    parser.add_argument("--epoch_begin", default=0, type=int)  # if you load a model trained for x "epochs", set epoch_begin = x
-    parser.add_argument("--epoch_save", default=5, type=int)  # save the model every [epoch_save] "epochs"
-
-    parser.add_argument("--micro_bsz", default=12, type=int)  # micro batch size (batch size per GPU)
-    parser.add_argument("--n_layer", default=6, type=int)
-    parser.add_argument("--n_embd", default=512, type=int)
-    parser.add_argument("--dim_att", default=0, type=int)
-    parser.add_argument("--dim_ffn", default=0, type=int)
-    parser.add_argument("--pre_ffn", default=0, type=int)  # replace first att layer by ffn (sometimes better)
-    parser.add_argument("--head_qk", default=0, type=int)  # my headQK trick
-    parser.add_argument("--tiny_att_dim", default=0, type=int)  # tiny attention dim
-    parser.add_argument("--tiny_att_layer", default=-999, type=int)  # tiny attention @ which layer
-
-    parser.add_argument("--lr_init", default=6e-4, type=float)  # 6e-4 for L12-D768, 4e-4 for L24-D1024, 3e-4 for L24-D2048
-    parser.add_argument("--lr_final", default=1e-5, type=float)
-    parser.add_argument("--warmup_steps", default=-1, type=int)  # try 20 if you load a model
-    parser.add_argument("--beta1", default=0.9, type=float)
-    parser.add_argument("--beta2", default=0.99, type=float)  # use 0.95 if you see spikes
-    parser.add_argument("--adam_eps", default=1e-8, type=float)
-    parser.add_argument("--grad_cp", default=0, type=int)  # gradient checkpt: saves VRAM, but slower
-    parser.add_argument("--dropout", default=0, type=float) # try 0.01 / 0.02 / 0.05 / 0.1
-    parser.add_argument("--weight_decay", default=0, type=float) # try 0.1
-    parser.add_argument("--weight_decay_final", default=-1, type=float)
-    parser.add_argument("--grad_clip", default=1.0, type=float) # reduce it to 0.7 / 0.5 / 0.3 / 0.2 for problematic samples
-
-    parser.add_argument("--my_pile_version", default=1, type=int)  # my special pile version
-    parser.add_argument("--my_pile_stage", default=0, type=int)  # my special pile mode
-    parser.add_argument("--my_pile_shift", default=-1, type=int)  # my special pile mode - text shift
-    parser.add_argument("--my_pile_edecay", default=0, type=int)
-    parser.add_argument("--layerwise_lr", default=1, type=int)  # layerwise lr for faster convergence (but slower it/s)
-    parser.add_argument("--ds_bucket_mb", default=200, type=int)  # deepspeed bucket size in MB. 200 seems enough
-    # parser.add_argument("--cuda_cleanup", default=0, type=int)  # extra cuda cleanup (sometimes helpful)
-
-    parser.add_argument("--my_sample_len", default=0, type=int)
-    parser.add_argument("--my_ffn_shift", default=1, type=int)
-    parser.add_argument("--my_att_shift", default=1, type=int)
-    parser.add_argument("--head_size_a", default=64, type=int) # can try larger values for larger models
-    parser.add_argument("--head_size_divisor", default=8, type=int)
-    parser.add_argument("--my_pos_emb", default=0, type=int)
-    parser.add_argument("--load_partial", default=0, type=int)
-    parser.add_argument("--magic_prime", default=0, type=int)
-    parser.add_argument("--my_qa_mask", default=0, type=int)
-    parser.add_argument("--my_random_steps", default=0, type=int)
-    parser.add_argument("--my_testing", default='x052', type=str)
-    parser.add_argument("--my_exit", default=99999999, type=int)
-    parser.add_argument("--my_exit_tokens", default=0, type=int)
-
-    if pl.__version__[0]=='2':
-        parser.add_argument("--accelerator", default="gpu", type=str)
-        parser.add_argument("--strategy", default="auto", type=str)
-        parser.add_argument("--devices", default=1, type=int)
-        parser.add_argument("--num_nodes", default=1, type=int)
-        parser.add_argument("--precision", default="fp16", type=str)
-        parser.add_argument("--accumulate_grad_batches", default=1, type=int)
-    else:
-        parser = Trainer.add_argparse_args(parser)
+def load_model(args):
     
-    args = parser.parse_args()
-    import os, warnings, math, datetime, sys, time
-    import numpy as np
-    import torch
-    from torch.utils.data import DataLoader
+
     if "deepspeed" in args.strategy:
         import deepspeed
     from pytorch_lightning import seed_everything
@@ -322,14 +277,9 @@ if __name__ == "__main__":
     model = model.to(dtype=torch.bfloat16)
     model = model.to('cuda').eval()
     print("Model loaded.")
-
-    import json
-    import subprocess
-    from difflib import SequenceMatcher
-    from tqdm import tqdm
-    
-    def run_rnafold(sequence: str) -> str:
-        """使用 RNAfold 获取 dot-bracket 结构"""
+    return model
+def run_rnafold(sequence: str) -> str:
+       
         process = subprocess.run(
             ["RNAfold", "--noPS"],
             input=sequence.encode(),
@@ -338,8 +288,7 @@ if __name__ == "__main__":
         )
         output = process.stdout.decode().split('\n')
         return output[1].strip() if len(output) > 1 else ""
-    
-    def evaluate_prediction(predicted_seq: str, target_struct: str) -> dict:
+def evaluate_prediction(predicted_seq: str, target_struct: str) -> dict:
         predicted_struct = run_rnafold(predicted_seq)
     
         
@@ -349,18 +298,19 @@ if __name__ == "__main__":
         correct_rate = match_count / len(target_struct)
         edit_dist = levenshtein(predicted_struct, target_struct)
         full_match = int(predicted_struct == target_struct)
-    
+        gc_count = predicted_seq.count('G') + predicted_seq.count('C')
+        gc_content = gc_count / len(predicted_seq) if predicted_seq else 0.0
         return {
             "predicted_sequence": predicted_seq,
             "predicted_structure": predicted_struct,
             "target_structure": target_struct,
             "correct_rate": correct_rate,
             "edit_distance": edit_dist,
-            "full_match": full_match
+            "full_match": full_match,
+            "gc_content": gc_content
         }
-    
-    def levenshtein(a: str, b: str) -> int:
-        """简单的 Levenshtein 距离实现"""
+def levenshtein(a: str, b: str) -> int:
+      
         n, m = len(a), len(b)
         if n > m:
             a, b = b, a
@@ -375,21 +325,153 @@ if __name__ == "__main__":
                     change += 1
                 current[j] = min(add, delete, change)
         return current[n]
+def compute_diversity(seqs):
+    n = len(seqs)
+    if n < 2:
+        return 0.0
+    dists = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            dists.append(levenshtein(seqs[i], seqs[j]))
+    return np.mean(dists)
+def evaluate_diversity_on_sampled_structures(
+    model,
+    test_data,
+    vocab,
+    rna_tokens,
+    ctx_len,
+    num_structures=100,
+    num_samples_per_structure=10,
     
-    # === 路径准备 ===
+ 
+):
+    
+    random.seed(42)
+    torch.manual_seed(42)
+    sampled_structures = random.sample(
+        list({s["structure"] for s in test_data}), min(num_structures, len(test_data))
+    )
+
+    generated_sequences = defaultdict(list)
+
+    with torch.no_grad():
+        for structure in tqdm(sampled_structures, desc="Generating sequences"):
+            prompt = structure + "\n"
+            input_ids = torch.tensor([[vocab[c] for c in prompt]], dtype=torch.long, device='cuda')
+
+            if input_ids.shape[1] > ctx_len:
+                input_ids = input_ids[:, -ctx_len:]
+
+            for _ in range(num_samples_per_structure):
+                pred_seq = generate_rna_sequence(model, input_ids, rna_tokens, vocab, ctx_len,args.topk,args.temperature)
+                generated_sequences[structure].append(pred_seq)
+
+    diversity_scores = []
+
+    for structure, seqs in generated_sequences.items():
+        diversity = compute_diversity(seqs)
+        diversity_scores.append((structure, diversity))
+
+    avg_diversity = np.mean([d for _, d in diversity_scores])
+
+    print(f"\nAverage Diversity over {len(diversity_scores)} structures: {avg_diversity:.2f}")
+
+
+    return diversity_scores, avg_diversity
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("--gc_target",default=0.5,type=float )
+    
+    parser.add_argument("--gc_strength",default=1.0,type=float )
+    parser.add_argument("--div_test", default=1,type=int,  help="Set 1 for diversity test")
+    parser.add_argument("--topk",default=4,type=int )
+    parser.add_argument("--temperature",default=0.00001 , type=float)
+    parser.add_argument("--test_json", type=str, help="Path to test JSON file")
+    parser.add_argument("--output_json", type=str,  help="Path to save result JSON")
+    parser.add_argument("--load_model", default="", type=str)  # full path, with .pth
+    parser.add_argument("--wandb", default="", type=str)  # wandb project name. if "" then don't use wandb
+    parser.add_argument("--proj_dir", default="out", type=str)
+    parser.add_argument("--random_seed", default="-1", type=int)
+    parser.add_argument("--train_type", default="", type=str) # ""/"states"
+
+    parser.add_argument("--data_file", default="", type=str)
+    parser.add_argument("--data_type", default="utf-8", type=str)
+    parser.add_argument("--vocab_size", default=0, type=int)  # vocab_size = 0 means auto (for char-level LM and .txt data)
+
+    parser.add_argument("--ctx_len", default=1024, type=int)
+    parser.add_argument("--epoch_steps", default=1000, type=int)  # a mini "epoch" has [epoch_steps] steps
+    parser.add_argument("--epoch_count", default=500, type=int)  # train for this many "epochs". will continue afterwards with lr = lr_final
+    parser.add_argument("--epoch_begin", default=0, type=int)  # if you load a model trained for x "epochs", set epoch_begin = x
+    parser.add_argument("--epoch_save", default=5, type=int)  # save the model every [epoch_save] "epochs"
+
+    parser.add_argument("--micro_bsz", default=12, type=int)  # micro batch size (batch size per GPU)
+    parser.add_argument("--n_layer", default=6, type=int)
+    parser.add_argument("--n_embd", default=512, type=int)
+    parser.add_argument("--dim_att", default=0, type=int)
+    parser.add_argument("--dim_ffn", default=0, type=int)
+    parser.add_argument("--pre_ffn", default=0, type=int)  # replace first att layer by ffn (sometimes better)
+    parser.add_argument("--head_qk", default=0, type=int)  # my headQK trick
+    parser.add_argument("--tiny_att_dim", default=0, type=int)  # tiny attention dim
+    parser.add_argument("--tiny_att_layer", default=-999, type=int)  # tiny attention @ which layer
+
+    parser.add_argument("--lr_init", default=6e-4, type=float)  # 6e-4 for L12-D768, 4e-4 for L24-D1024, 3e-4 for L24-D2048
+    parser.add_argument("--lr_final", default=1e-5, type=float)
+    parser.add_argument("--warmup_steps", default=-1, type=int)  # try 20 if you load a model
+    parser.add_argument("--beta1", default=0.9, type=float)
+    parser.add_argument("--beta2", default=0.99, type=float)  # use 0.95 if you see spikes
+    parser.add_argument("--adam_eps", default=1e-8, type=float)
+    parser.add_argument("--grad_cp", default=0, type=int)  # gradient checkpt: saves VRAM, but slower
+    parser.add_argument("--dropout", default=0, type=float) # try 0.01 / 0.02 / 0.05 / 0.1
+    parser.add_argument("--weight_decay", default=0, type=float) # try 0.1
+    parser.add_argument("--weight_decay_final", default=-1, type=float)
+    parser.add_argument("--grad_clip", default=1.0, type=float) # reduce it to 0.7 / 0.5 / 0.3 / 0.2 for problematic samples
+
+    parser.add_argument("--my_pile_version", default=1, type=int)  # my special pile version
+    parser.add_argument("--my_pile_stage", default=0, type=int)  # my special pile mode
+    parser.add_argument("--my_pile_shift", default=-1, type=int)  # my special pile mode - text shift
+    parser.add_argument("--my_pile_edecay", default=0, type=int)
+    parser.add_argument("--layerwise_lr", default=1, type=int)  # layerwise lr for faster convergence (but slower it/s)
+    parser.add_argument("--ds_bucket_mb", default=200, type=int)  # deepspeed bucket size in MB. 200 seems enough
+    # parser.add_argument("--cuda_cleanup", default=0, type=int)  # extra cuda cleanup (sometimes helpful)
+
+    parser.add_argument("--my_sample_len", default=0, type=int)
+    parser.add_argument("--my_ffn_shift", default=1, type=int)
+    parser.add_argument("--my_att_shift", default=1, type=int)
+    parser.add_argument("--head_size_a", default=64, type=int) # can try larger values for larger models
+    parser.add_argument("--head_size_divisor", default=8, type=int)
+    parser.add_argument("--my_pos_emb", default=0, type=int)
+    parser.add_argument("--load_partial", default=0, type=int)
+    parser.add_argument("--magic_prime", default=0, type=int)
+    parser.add_argument("--my_qa_mask", default=0, type=int)
+    parser.add_argument("--my_random_steps", default=0, type=int)
+    parser.add_argument("--my_testing", default='x052', type=str)
+    parser.add_argument("--my_exit", default=99999999, type=int)
+    parser.add_argument("--my_exit_tokens", default=0, type=int)
+
+    if pl.__version__[0]=='2':
+        parser.add_argument("--accelerator", default="gpu", type=str)
+        parser.add_argument("--strategy", default="auto", type=str)
+        parser.add_argument("--devices", default=1, type=int)
+        parser.add_argument("--num_nodes", default=1, type=int)
+        parser.add_argument("--precision", default="fp16", type=str)
+        parser.add_argument("--accumulate_grad_batches", default=1, type=int)
+    else:
+        parser = Trainer.add_argparse_args(parser)
+    
+    args = parser.parse_args()
+    model=load_model(args)
+
     os.makedirs(os.path.dirname(args.output_json), exist_ok=True)
     results_path = args.output_json.replace(".json", "_details.jsonl")
     summary_path = args.output_json.replace(".json", "_summary.json")
-    
-    # === 加载测试集 ===
+
     with open(args.test_json, "r") as f:
         test_data = json.load(f)
-    
-    # === 检查是否已有部分输出，尝试断点恢复 ===
+
     completed_count = 0
     completed_structures = set()
     if os.path.exists(results_path):
-        print(f"🔁 Found existing results: {results_path} - attempting to resume...")
+        print(f"Found existing results: {results_path} - attempting to resume...")
         with open(results_path, "r") as fin:
             for line in fin:
                 try:
@@ -398,65 +480,68 @@ if __name__ == "__main__":
                     completed_count += 1
                 except:
                     continue
-        print(f"✅ Resuming from sample {completed_count}/{len(test_data)}")
-    
-    # === 统计信息初始化 ===
+        print(f"Resuming from sample {completed_count}/{len(test_data)}")
+
     total_correct = 0
     total_edit_distance = 0
     total_full_match = 0
-    
-    from tqdm import tqdm
+    total_gc=0
 
-    # === 输出文件打开追加写入 ===
+
+
     with open(results_path, "a") as fout:
         for idx, sample in enumerate(tqdm(test_data)):
             structure = sample["structure"]
 
-            # 跳过已完成样本
             if structure in completed_structures:
                 continue
 
             prompt = structure + "\n"
             input_ids = torch.tensor([[vocab[c] for c in prompt]], dtype=torch.long, device='cuda')
 
-            # === 打印当前样本输入长度 ===
-            print(f"[Sample {idx}] input length = {input_ids.shape[1]}")
-
-            # === 检查并截断超长输入 ===
+           
             if input_ids.shape[1] > args.ctx_len:
                 print(f"[WARNING] Input length {input_ids.shape[1]} exceeds ctx_len {args.ctx_len}, truncating...")
                 input_ids = input_ids[:, -args.ctx_len:]
 
             with torch.no_grad():
-                pred_seq = generate_rna_sequence(model, input_ids, rna_tokens, vocab, args.ctx_len)
+                pred_seq = generate_rna_sequence(model, input_ids, rna_tokens, vocab, args.ctx_len,args.topk,args.temperature,args.gc_target,args.gc_strength)
 
             result = evaluate_prediction(pred_seq, structure)
             fout.write(json.dumps(result) + "\n")
             fout.flush()
-
             total_correct += result["correct_rate"]
             total_edit_distance += result["edit_distance"]
             total_full_match += result["full_match"]
-
-            done_so_far = len(completed_structures) + 1
+            total_gc+=result["gc_content"]
+            completed_structures.add(structure)
+            done_so_far = len(completed_structures) 
             if done_so_far % 10 == 0 or done_so_far == len(test_data):
                 avg_correct = total_correct / done_so_far
                 avg_edit_dist = total_edit_distance / done_so_far
                 full_match_ratio = total_full_match / done_so_far
-                print(f"[{done_so_far}/{len(test_data)}] Correct Rate: {avg_correct:.4f} | Edit Distance: {avg_edit_dist:.2f} | Full Match: {full_match_ratio:.4f}")
+                gc_ratio=total_gc/done_so_far
+                print(f"[{done_so_far}/{len(test_data)}] Correct Rate: {avg_correct:.4f} | Edit Distance: {avg_edit_dist:.2f} | Full Match: {full_match_ratio:.4f},| GC Content: {gc_ratio:.4f}")
 
-            completed_structures.add(structure)
-    
-    # === 保存 summary 统计 ===
+            
     summary = {
         "num_samples": len(completed_structures),
         "average_correct_rate": total_correct / len(completed_structures),
         "average_edit_distance": total_edit_distance / len(completed_structures),
-        "full_match_accuracy": total_full_match / len(completed_structures)
+        "full_match_accuracy": total_full_match / len(completed_structures),
+        "gc_content":total_gc / len(completed_structures)
     }
+    if(args.div_test==1):
+        div_scores, avg_div = evaluate_diversity_on_sampled_structures(model=model,test_data=test_data,vocab=vocab,rna_tokens=rna_tokens,
+    ctx_len=args.ctx_len,
+    
+)
+        summary["avg_div"]=avg_div
+
+    
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
     
-    print(f"\n✅ Evaluation finished.")
+    print(f"\nEvaluation finished.")
     print(f"Summary saved to: {summary_path}")
     print(f"Details saved to: {results_path}")
