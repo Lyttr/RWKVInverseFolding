@@ -47,11 +47,13 @@ This project is focused on inverse folding using the RWKV model. It includes var
    bash inference.sh
    ```
 
-## RWKV Model
+## Acknowledgement
 
-RWKV is a novel neural network architecture that combines the strengths of RNNs and Transformers. It is designed to handle long sequences efficiently and is particularly useful in tasks like inverse folding.
+This project is based on or inspired by the [RWKV-LM](https://github.com/BlinkDL/RWKV-LM) repository by BlinkDL.  
+We thank the authors for open-sourcing their work.
 
-For more information, visit the [RWKV GitHub repository](https://github.com/BlinkDL/RWKV-LM).
+RWKV is a novel RNN with transformer-level performance, and the original implementation can be found at:
+https://github.com/BlinkDL/RWKV-LM
 
 ## License
 
