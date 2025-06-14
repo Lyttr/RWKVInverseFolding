@@ -34,33 +34,30 @@ def generate_rna_sequence(
     for i in range(ctx_len):
         if input_ids.shape[1] > ctx_len:
             break
-
+        
         logits = model(input_ids)[:, -1, :]  
         logits = logits / temperature
-        probs = torch.nn.functional.softmax(logits, dim=-1)
-
-  
+        
         if len(rna_seq) > 0:
             gc_count = rna_seq.count('G') + rna_seq.count('C')
             gc_ratio = gc_count / len(rna_seq)
-
-     
             for token_id in rna_tokens:
                 token = id_to_token[token_id]
                 if token in ['G', 'C']:
                     if gc_ratio < gc_target:
-                        probs[0, token_id] *= gc_strength  # boost
+                        logits[0, token_id] += gc_strength 
                     elif gc_ratio > gc_target:
-                        probs[0, token_id] /= gc_strength  # suppress
+                        logits[0, token_id] -= gc_strength  
 
-           
-            probs = probs / probs.sum(dim=-1, keepdim=True)
+        logits = logits / temperature
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+  
+        
 
         topk_probs, topk_indices = torch.topk(probs, k=top_k, dim=-1)
         topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
         next_token = torch.multinomial(topk_probs, num_samples=1)
         token_id = topk_indices[0, next_token.item()].item()
-
         if token_id in rna_tokens:
             rna_seq += id_to_token[token_id]
         elif token_id == vocab['PAD']:
@@ -505,8 +502,7 @@ if __name__ == "__main__":
                 input_ids = input_ids[:, -args.ctx_len:]
 
             with torch.no_grad():
-                pred_seq = generate_rna_sequence(model, input_ids, rna_tokens, vocab, args.ctx_len,args.topk,args.temperature,args.gc_target,args.gc_strength)
-
+                pred_seq = generate_rna_sequence(model, input_ids, rna_tokens, vocab, id_to_token,args.ctx_len,args.topk,args.temperature,args.gc_target,args.gc_strength)
             result = evaluate_prediction(pred_seq, structure)
             fout.write(json.dumps(result) + "\n")
             fout.flush()
