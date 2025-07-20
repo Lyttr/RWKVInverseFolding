@@ -6,7 +6,7 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datasets import load_dataset
 import argparse
-
+import pandas as pd
 
 def generate_random_rna_sequence(n):
     return ''.join(random.choices('AUGC', k=n))
@@ -33,9 +33,10 @@ def run_rnafold(seq, rnafold_cmd):
 
 def is_valid_structure(dot):
     return bool(dot and set(dot) != {'.'})
+import orjson
 def save_json(data, path):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+    with open(path, "wb") as f:
+        f.write(orjson.dumps(data))
 def load_json(path):
     if not os.path.exists(path):
         return None
@@ -95,11 +96,12 @@ def generate_train_set(test_structures, output_dir, train_size, chunk_size, num_
 
 def main():
     parser = argparse.ArgumentParser(description="Generate RNA dataset using RNAfold")
-    parser.add_argument("--output_dir", type=str, default="rna_dataset/rna_generate")
-    parser.add_argument("--train_size", type=int, default=2000000)
+    parser.add_argument("--output_dir", type=str, default="rna_dataset/eterna100")
+    parser.add_argument("--testraw_dir", type=str, default="eterna100_puzzles.tsv")
+    parser.add_argument("--train_size", type=int, default=4000000)
     parser.add_argument("--chunk_size", type=int, default=10000)
-    parser.add_argument("--min_len", type=int, default=80)
-    parser.add_argument("--max_len", type=int, default=120)
+    parser.add_argument("--min_len", type=int, default=12)
+    parser.add_argument("--max_len", type=int, default=400)
     parser.add_argument("--num_threads", type=int, default=8)
     parser.add_argument("--rnafold_cmd", type=str, default="RNAfold")
     args = parser.parse_args()
@@ -107,26 +109,25 @@ def main():
     test_path = os.path.join(args.output_dir, "rna_test.json")
 
   
-    dataset = load_dataset("multimolecule/eternabench-cm")
+    tsv_path = args.testraw_dir
+  
+ 
+   
+
+
+    df = pd.read_csv(tsv_path, sep="\t")
 
     structures = set()
-    structure_to_sequence = {}
-    for split in ["train", "test"]:
-        for entry in dataset[split]:
-            structure = entry['secondary_structure']
-            sequence = entry['sequence']
-            if len(structure) <= args.max_len and structure not in structures:
-                structures.add(structure)
-                structure_to_sequence[structure] = sequence
-
-    test_data = [
-        {"sequence": sequence, "structure": structure}
-        for structure, sequence in structure_to_sequence.items()
-    ]
+    for structure in df["Secondary Structure V2"].dropna():
+        if len(structure) <=  args.max_len:
+            structures.add(structure)
+   
+  
+    test_data = [{"structure": structure} for structure in structures]
 
     os.makedirs(args.output_dir, exist_ok=True)
     save_json(test_data, test_path)
-    print(f"Test set saved: {len(test_data)} samples → {test_path}")
+    print(f"Test set saved: {len(test_data)} structures → {test_path}")
 
     generate_train_set(
         test_structures=structures,
