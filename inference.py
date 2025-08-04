@@ -34,34 +34,40 @@ def generate_rna_sequence(
     for i in range(ctx_len):
         if input_ids.shape[1] > ctx_len:
             break
-        
-        logits = model(input_ids)[:, -1, :]  
-        logits = logits / temperature
-        
-        if len(rna_seq) > 0:
-            gc_count = rna_seq.count('G') + rna_seq.count('C')
-            gc_ratio = gc_count / len(rna_seq)
-            for token_id in rna_tokens:
-                token = id_to_token[token_id]
-                if token in ['G', 'C']:
-                    if gc_ratio < gc_target:
-                        logits[0, token_id] += gc_strength 
-                    elif gc_ratio > gc_target:
-                        logits[0, token_id] -= gc_strength  
 
+        logits = model(input_ids)[:, -1, :]  # Get last token logits
         logits = logits / temperature
-        probs = torch.nn.functional.softmax(logits, dim=-1)
-  
-        
 
-        topk_probs, topk_indices = torch.topk(probs, k=top_k, dim=-1)
-        topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
-        next_token = torch.multinomial(topk_probs, num_samples=1)
-        token_id = topk_indices[0, next_token.item()].item()
+        if top_k == 1:
+         
+            token_id = torch.argmax(logits, dim=-1).item()
+        else:
+
+            if len(rna_seq) > 0:
+                gc_count = rna_seq.count('G') + rna_seq.count('C')
+                gc_ratio = gc_count / len(rna_seq)
+                for token_id_gc in rna_tokens:
+                    token = id_to_token[token_id_gc]
+                    if token in ['G', 'C']:
+                        if gc_ratio < gc_target:
+                            logits[0, token_id_gc] += gc_strength 
+                        elif gc_ratio > gc_target:
+                            logits[0, token_id_gc] -= gc_strength  
+
+            logits = logits / temperature  # Reapply temperature scaling
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+
+            topk_probs, topk_indices = torch.topk(probs, k=top_k, dim=-1)
+            topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
+            next_token = torch.multinomial(topk_probs, num_samples=1)
+            token_id = topk_indices[0, next_token.item()].item()
+
+
         if token_id in rna_tokens:
             rna_seq += id_to_token[token_id]
         elif token_id == vocab['PAD']:
             break
+
 
         next_token_tensor = torch.tensor([[token_id]], dtype=torch.long, device=input_ids.device)
         input_ids = torch.cat([input_ids, next_token_tensor], dim=1)
