@@ -17,7 +17,7 @@ N_LAYER="8"
 N_EMBD="512"
 #
 CTX_LEN="1024" # !!! change magic_prime if you change ctx_len !!!
-PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"1024" # set output folder
+PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"1024-1" # set output folder
 #
 #######################################################################################################################
 #
@@ -45,7 +45,7 @@ DS_BUCKET_MB=2 # set to 2 for consumer GPUs, set to 200 for A100 / H100 (affects
 #
 python train.py --load_model "0" --wandb "rna-rwkv" --proj_dir $PROJ_DIR --my_testing $MODEL_TYPE \
  --ctx_len $CTX_LEN --my_pile_stage 3 --epoch_count 999999 --epoch_begin 0 \
- --data_file "/pvc/dataset/train.npy" --my_exit_tokens 5120000000 --magic_prime 4999999 \
+ --data_file "/pvc/dataset/train.npy" --my_exit_tokens 20480000000 --magic_prime 19999999 \
  --num_nodes $N_NODE --micro_bsz $M_BSZ --n_layer $N_LAYER --n_embd $N_EMBD --pre_ffn 0 --head_qk 0 \
  --lr_init $LR_INIT --lr_final $LR_FINAL --warmup_steps 50 --beta1 0.9 --beta2 0.99 --adam_eps 1e-18 --my_pile_edecay 0 --data_type "numpy" --vocab_size 9 \
  --weight_decay 0.01 --epoch_save $EPOCH_SAVE --head_size_a 64 \
