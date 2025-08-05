@@ -13,8 +13,8 @@
 MODEL_TYPE="x052" # x060 => rwkv-6.0
 # MODEL_TYPE="mamba" # pip install mamba_ssm --upgrade
 #
-N_LAYER="12"
-N_EMBD="768"
+N_LAYER="8"
+N_EMBD="512"
 #
 CTX_LEN="1024" # !!! change magic_prime if you change ctx_len !!!
 PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"1024" # set output folder
@@ -41,7 +41,7 @@ EPOCH_SAVE=1 # save every 10 "miniepochs" (1 miniepoch = 40320 * ctx_len tokens)
 N_NODE=1 # number of nodes
 GPU_PER_NODE=1 # number of GPUs per node
 #
-DS_BUCKET_MB=2 # set to 2 for consumer GPUs, set to 200 for A100 / H100 (affects speed & vram usage)
+DS_BUCKET_MB=10 # set to 2 for consumer GPUs, set to 200 for A100 / H100 (affects speed & vram usage)
 #
 python train.py --load_model "0" --wandb "rna-rwkv" --proj_dir $PROJ_DIR --my_testing $MODEL_TYPE \
  --ctx_len $CTX_LEN --my_pile_stage 3 --epoch_count 999999 --epoch_begin 0 \
