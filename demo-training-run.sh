@@ -13,8 +13,8 @@
 MODEL_TYPE="x052" # x060 => rwkv-6.0
 # MODEL_TYPE="mamba" # pip install mamba_ssm --upgrade
 #
-N_LAYER="8"
-N_EMBD="512"
+N_LAYER="12"
+N_EMBD="768"
 #
 CTX_LEN="1024" # !!! change magic_prime if you change ctx_len !!!
 PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"1024" # set output folder
@@ -27,7 +27,7 @@ PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"1024" # set output fo
 # Larger model => use smaller LR
 # Finetuning => use very small LR, such as 1e-5
 #
-M_BSZ="64" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
+M_BSZ="32" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
 LR_INIT="6e-4"
 LR_FINAL="6e-5"
 GRAD_CP=0 # 1 => slower, save VRAM; 0 => faster, more VRAM
