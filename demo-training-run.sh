@@ -45,7 +45,7 @@ DS_BUCKET_MB=10 # set to 2 for consumer GPUs, set to 200 for A100 / H100 (affect
 #
 python train.py --load_model "0" --wandb "rna-rwkv" --proj_dir $PROJ_DIR --my_testing $MODEL_TYPE \
  --ctx_len $CTX_LEN --my_pile_stage 3 --epoch_count 999999 --epoch_begin 0 \
- --data_file "/pvc/dataset/8M/8M.npy.npy" --my_exit_tokens 40960000000 --magic_prime 39999983 \
+ --data_file "/pvc/dataset/8M/8M.npy" --my_exit_tokens 40960000000 --magic_prime 39999983 \
  --num_nodes $N_NODE --micro_bsz $M_BSZ --n_layer $N_LAYER --n_embd $N_EMBD --pre_ffn 0 --head_qk 0 \
  --lr_init $LR_INIT --lr_final $LR_FINAL --warmup_steps 50 --beta1 0.9 --beta2 0.99 --adam_eps 1e-18 --my_pile_edecay 0 --data_type "numpy" --vocab_size 9 \
  --weight_decay 0.01 --epoch_save $EPOCH_SAVE --head_size_a 64 \
