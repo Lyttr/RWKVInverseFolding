@@ -102,7 +102,7 @@ def main():
     parser.add_argument("--chunk_size", type=int, default=10000)
     parser.add_argument("--min_len", type=int, default=12)
     parser.add_argument("--max_len", type=int, default=400)
-    parser.add_argument("--num_threads", type=int, default=16)
+    parser.add_argument("--num_threads", type=int, default=8)
     parser.add_argument("--rnafold_cmd", type=str, default="RNAfold")
     args = parser.parse_args()
 
