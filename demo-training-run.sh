@@ -27,7 +27,7 @@ PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"8M0823" # set output 
 # Larger model => use smaller LR
 # Finetuning => use very small LR, such as 1e-5
 #
-M_BSZ="64" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
+M_BSZ="128" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
 LR_INIT="6e-4"
 LR_FINAL="6e-5"
 GRAD_CP=0 # 1 => slower, save VRAM; 0 => faster, more VRAM
