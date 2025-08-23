@@ -17,7 +17,7 @@ N_LAYER="8"
 N_EMBD="512"
 #
 CTX_LEN="1024" # !!! change magic_prime if you change ctx_len !!!
-PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"8M" # set output folder
+PROJ_DIR="/pvc/RWKVout/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE"8M0823" # set output folder
 #
 #######################################################################################################################
 #
