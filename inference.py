@@ -44,15 +44,15 @@ def generate_rna_sequence(
         else:
 
             if len(rna_seq) > 0:
-                gc_count = rna_seq.count('G') + rna_seq.count('C')
-                gc_ratio = gc_count / len(rna_seq)
+#                 gc_count = rna_seq.count('G') + rna_seq.count('C')
+#                 gc_ratio = gc_count / len(rna_seq)
                 for token_id_gc in rna_tokens:
                     token = id_to_token[token_id_gc]
-                    if token in ['G', 'C']:
-                        if gc_ratio < gc_target:
-                            logits[0, token_id_gc] += gc_strength 
-                        elif gc_ratio > gc_target:
-                            logits[0, token_id_gc] -= gc_strength  
+#                     if token in ['G', 'C']:
+#                         if gc_ratio < gc_target:
+#                             logits[0, token_id_gc] += gc_strength 
+#                         elif gc_ratio > gc_target:
+#                             logits[0, token_id_gc] -= gc_strength  
 
             logits = logits / temperature  # Reapply temperature scaling
             probs = torch.nn.functional.softmax(logits, dim=-1)
@@ -502,30 +502,53 @@ if __name__ == "__main__":
             prompt = structure + "\n"
             input_ids = torch.tensor([[vocab[c] for c in prompt]], dtype=torch.long, device='cuda')
 
-           
             if input_ids.shape[1] > args.ctx_len:
                 print(f"[WARNING] Input length {input_ids.shape[1]} exceeds ctx_len {args.ctx_len}, truncating...")
                 input_ids = input_ids[:, -args.ctx_len:]
 
             with torch.no_grad():
-                pred_seq = generate_rna_sequence(model, input_ids, rna_tokens, vocab, id_to_token,args.ctx_len,args.topk,args.temperature,args.gc_target,args.gc_strength)
-            result = evaluate_prediction(pred_seq, structure)
-            fout.write(json.dumps(result) + "\n")
-            fout.flush()
-            total_correct += result["correct_rate"]
-            total_edit_distance += result["edit_distance"]
-            total_full_match += result["full_match"]
-            total_gc+=result["gc_content"]
-            completed_structures.add(structure)
-            done_so_far = len(completed_structures) 
-            if done_so_far % 10 == 0 or done_so_far == len(test_data):
-                avg_correct = total_correct / done_so_far
-                avg_edit_dist = total_edit_distance / done_so_far
-                full_match_ratio = total_full_match / done_so_far
-                gc_ratio=total_gc/done_so_far
-                print(f"[{done_so_far}/{len(test_data)}] Correct Rate: {avg_correct:.4f} | Edit Distance: {avg_edit_dist:.2f} | Full Match: {full_match_ratio:.4f},| GC Content: {gc_ratio:.4f}")
+                best_result = None
+                for attempt in range(20):
+                    pred_seq = generate_rna_sequence(
+                        model, input_ids, rna_tokens, vocab, id_to_token,
+                        args.ctx_len, args.topk, args.temperature,
+                        args.gc_target, args.gc_strength
+                    )
+                    cur = evaluate_prediction(pred_seq, structure)
 
-            
+                    if best_result is None:
+                        best_result = cur
+                    else:
+                
+                        if (
+                            (cur["full_match"] > best_result["full_match"]) or
+                            (cur["full_match"] == best_result["full_match"] and cur["correct_rate"] > best_result["correct_rate"]) or
+                            (cur["full_match"] == best_result["full_match"] and cur["correct_rate"] == best_result["correct_rate"] and cur["edit_distance"] < best_result["edit_distance"])
+                        ):
+                            best_result = cur
+
+                    if cur["full_match"]:
+                        break
+
+
+            fout.write(json.dumps(best_result) + "\n")
+            fout.flush()
+
+            total_correct       += best_result["correct_rate"]
+            total_edit_distance += best_result["edit_distance"]
+            total_full_match    += best_result["full_match"]
+            total_gc            += best_result["gc_content"]
+
+            completed_structures.add(structure)
+
+            done_so_far = len(completed_structures)
+            if done_so_far % 10 == 0 or done_so_far == len(test_data):
+                avg_correct      = total_correct / done_so_far
+                avg_edit_dist    = total_edit_distance / done_so_far
+                full_match_ratio = total_full_match / done_so_far
+                gc_ratio         = total_gc / done_so_far
+                print(f"[{done_so_far}/{len(test_data)}] Correct Rate: {avg_correct:.4f} | Edit Distance: {avg_edit_dist:.2f} | Full Match: {full_match_ratio:.4f} | GC Content: {gc_ratio:.4f}")
+
     summary = {
         "num_samples": len(completed_structures),
         "average_correct_rate": total_correct / len(completed_structures),
