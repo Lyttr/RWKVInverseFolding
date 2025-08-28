@@ -4,7 +4,25 @@
 
 import logging
 logging.basicConfig(level=logging.INFO)
+def collate_varlen(batch, pad_id: int = 8):
+    B = len(batch)
+    lens = [x[0].size(0) for x in batch]
+    Tm  = max(lens)
 
+    def pad_1d(x, value):
+        if x.size(0) == Tm:
+            return x
+        out = x.new_full((Tm,), value)
+        out[:x.size(0)] = x
+        return out
+
+    inputs, labels, masks = [], [], []
+    for inp, lab, m in batch:
+        inputs.append(pad_1d(inp, pad_id))
+        labels.append(pad_1d(lab, pad_id))
+        masks.append(pad_1d(m, 0.0))
+
+    return torch.stack(inputs, 0), torch.stack(labels, 0), torch.stack(masks, 0)  # [B, Tm]
 if __name__ == "__main__":
     from argparse import ArgumentParser
     from pytorch_lightning import Trainer
@@ -318,7 +336,7 @@ if __name__ == "__main__":
         trainer.strategy.config["zero_optimization"]["reduce_bucket_size"] = args.ds_bucket_mb * 1000 * 1000
 
     # must set shuffle=False, persistent_workers=False (because worker is in another thread)
-    data_loader = DataLoader(train_data, shuffle=False, pin_memory=True, batch_size=args.micro_bsz, num_workers=1, persistent_workers=False, drop_last=True)
+    data_loader = DataLoader(train_data, shuffle=False, pin_memory=True, batch_size=args.micro_bsz, num_workers=1, persistent_workers=False, drop_last=True,collate_fn=collate_varlen )
 
     # if args.train_type == 'states':
     #     model.requires_grad_(False)
