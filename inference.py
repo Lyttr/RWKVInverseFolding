@@ -31,13 +31,12 @@ def generate_rna_sequence(
 ):
     rna_seq = ""
 
-    for i in range(ctx_len):
+    for i in range(len(input_ids[0])):
         if input_ids.shape[1] > ctx_len:
             break
 
         logits = model(input_ids)[:, -1, :]  # Get last token logits
-        logits = logits / temperature
-
+       
         if top_k == 1:
          
             token_id = torch.argmax(logits, dim=-1).item()
@@ -54,7 +53,7 @@ def generate_rna_sequence(
 #                         elif gc_ratio > gc_target:
 #                             logits[0, token_id_gc] -= gc_strength  
 
-            logits = logits / temperature  # Reapply temperature scaling
+            logits = logits / temperature  
             probs = torch.nn.functional.softmax(logits, dim=-1)
 
             topk_probs, topk_indices = torch.topk(probs, k=top_k, dim=-1)
@@ -137,32 +136,53 @@ def load_model(args):
         assert args.epoch_steps * args.real_bsz == 40320
         # if args.my_pile_stage == 2:
         #     assert args.lr_final == args.lr_init
-        if args.my_pile_stage >= 2:  # find latest saved model
-            list_p = []
-            for p in os.listdir(args.proj_dir):
-                if p.startswith("rwkv") and p.endswith(".pth"):
-                    p = ((p.split("-"))[1].split("."))[0]
-                    if p != "final":
-                        if p == "init":
-                            p = -1
-                        else:
-                            p = int(p)
-                        list_p += [p]
-            list_p.sort()
-            max_p = list_p[-1]
-            if len(list_p) > 1:
-                args.my_pile_prev_p = list_p[-2]  # in case max_p is corrupted
-            if max_p == -1:
-                args.load_model = f"{args.proj_dir}/rwkv-init.pth"
-            else:
-                args.load_model = f"{args.proj_dir}/rwkv-{max_p}.pth"
-                if args.warmup_steps < 0:
-                    if args.my_pile_stage == 2:
-                        args.warmup_steps = 10
+        if args.my_pile_stage >= 2:  
+            max_p = None
+            chosen = None
+            if getattr(args, "load_model", None):
+                lm = os.path.expanduser(str(args.load_model))
+                if os.path.exists(lm):
+                    chosen = lm
+                    base = os.path.basename(lm)
+                    tag = base.replace(".pth", "").split("-")[-1]
+                    if tag == "init":
+                        max_p = -1
                     else:
-                        args.warmup_steps = 30
-            args.epoch_begin = max_p + 1
-
+                        try:
+                            max_p = int(tag)
+                        except Exception:
+                            max_p = None  
+                else:
+                    print(f"[warn] args.load_model not found: {lm}. Fallback to latest in {args.proj_dir}")
+            if chosen is None:
+                list_p = []
+                for p in os.listdir(args.proj_dir):
+                    if p.startswith("rwkv") and p.endswith(".pth"):
+                        tag = p.split("-")[1].split(".")[0]
+                        if tag == "final":
+                            continue
+                        if tag == "init":
+                            list_p.append(-1)
+                        else:
+                            try:
+                                list_p.append(int(tag))
+                            except Exception:
+                                pass
+                if not list_p:
+                    raise FileNotFoundError(f"No checkpoints found under {args.proj_dir}")
+                list_p.sort()
+                max_p = list_p[-1]
+                if len(list_p) > 1:
+                    args.my_pile_prev_p = list_p[-2]
+                if max_p == -1:
+                    chosen = f"{args.proj_dir}/rwkv-init.pth"
+                else:
+                    chosen = f"{args.proj_dir}/rwkv-{max_p}.pth"
+            args.load_model = chosen
+            if getattr(args, "warmup_steps", 0) < 0:
+                args.warmup_steps = 10 if args.my_pile_stage == 2 else 30
+            if isinstance(max_p, int):
+                args.epoch_begin = max_p + 1
     samples_per_epoch = args.epoch_steps * args.real_bsz
     tokens_per_epoch = samples_per_epoch * args.ctx_len
     try:
@@ -508,7 +528,7 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 best_result = None
-                for attempt in range(20):
+                for attempt in range(10):
                     pred_seq = generate_rna_sequence(
                         model, input_ids, rna_tokens, vocab, id_to_token,
                         args.ctx_len, args.topk, args.temperature,
