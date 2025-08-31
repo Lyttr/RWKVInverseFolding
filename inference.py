@@ -24,54 +24,150 @@ id_to_token = {
 }
 vocab = {v: k for k, v in id_to_token.items()}
 rna_tokens = {3, 4, 5, 6}  
-def generate_rna_sequence(
-    model, input_ids, rna_tokens, vocab, id_to_token,
-    ctx_len=256, top_k=4, temperature=0.00001,
-    gc_target=0.5, gc_strength=1.0
-):
-    rna_seq = ""
+import torch
+from typing import Dict, List
 
-    for i in range(len(input_ids[0])):
-        if input_ids.shape[1] > ctx_len:
+
+def _pair_map_paren(structure: str) -> List[int]:
+    stack, pair = [], [-1] * len(structure)
+    for i, ch in enumerate(structure):
+        if ch == '(':
+            stack.append(i)
+        elif ch == ')':
+            if not stack:
+                raise ValueError("Unbalanced structure: ')' without '('")
+            j = stack.pop()
+            pair[i] = j
+            pair[j] = i
+        elif ch != '.':
+            raise ValueError("Only '(', ')', '.' are allowed in structure")
+    if stack:
+        raise ValueError("Unbalanced structure: leftover '('")
+    return pair
+
+def _comp(b: str) -> str:
+    m = {'A':'U','U':'A','G':'C','C':'G'}
+    if b not in m:
+        raise ValueError(f"Unknown base {b}")
+    return m[b]
+
+def _decode_structure_from_prompt(input_ids: torch.Tensor, id_to_token: Dict[int, str]) -> str:
+    toks = [id_to_token[int(t)] for t in input_ids[0].tolist()]
+    structure_chars = []
+    started = False
+    for ch in toks:
+        if ch == '\n':
             break
-
-        logits = model(input_ids)[:, -1, :]  # Get last token logits
-       
-        if top_k == 1:
-         
-            token_id = torch.argmax(logits, dim=-1).item()
+        if ch in ('(', ')', '.'):
+            structure_chars.append(ch)
+            started = True
         else:
-
-            if len(rna_seq) > 0:
-#                 gc_count = rna_seq.count('G') + rna_seq.count('C')
-#                 gc_ratio = gc_count / len(rna_seq)
-                for token_id_gc in rna_tokens:
-                    token = id_to_token[token_id_gc]
-#                     if token in ['G', 'C']:
-#                         if gc_ratio < gc_target:
-#                             logits[0, token_id_gc] += gc_strength 
-#                         elif gc_ratio > gc_target:
-#                             logits[0, token_id_gc] -= gc_strength  
-
-            logits = logits / temperature  
-            probs = torch.nn.functional.softmax(logits, dim=-1)
-
-            topk_probs, topk_indices = torch.topk(probs, k=top_k, dim=-1)
-            topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
-            next_token = torch.multinomial(topk_probs, num_samples=1)
-            token_id = topk_indices[0, next_token.item()].item()
+            if started:
+                break
+            else:
+                continue
+    return ''.join(structure_chars)
 
 
-        if token_id in rna_tokens:
-            rna_seq += id_to_token[token_id]
-        elif token_id == vocab['PAD']:
+def generate_rna_sequence(
+    model,
+    input_ids: torch.Tensor,
+    rna_tokens,
+    vocab: dict,          
+    id_to_token: dict,      
+    ctx_len: int = 256,
+    top_k: int = 4,
+    temperature: float = 1.0,
+    gc_target: float = 0.0,     
+    gc_strength: float = 0.0,   
+) -> str:
+    """
+    从 input_ids 前缀解码 target_structure（到首个 '\\n' 为止），
+    仅在 {A,U,G,C} 上采样，遇到 ')' 或已锁定位点强制互补，结束后全局校正，保证所有配对互补。
+    """
+    device = input_ids.device
+    target_structure = _decode_structure_from_prompt(input_ids, id_to_token)
+    if not target_structure:
+        raise ValueError("Failed to decode target_structure from input_ids (expect 'structure + \\n').")
+    L = len(target_structure)
+    pair = _pair_map_paren(target_structure)
+    must_have = {'A','U','G','C'}
+    if not must_have.issubset(vocab.keys()):
+        raise ValueError("vocab must contain keys: 'A','U','G','C'")
+    allowed_ids = {vocab['A'], vocab['U'], vocab['G'], vocab['C']}
+    if rna_tokens:
+        allowed_ids = allowed_ids.intersection(set(rna_tokens))
+    if allowed_ids != {vocab['A'], vocab['U'], vocab['G'], vocab['C']}:
+        raise ValueError("rna_tokens/vocab must contain exactly A,U,G,C")
+
+    allowed_idxs = sorted(list(allowed_ids))
+    base_to_id = {'A':vocab['A'], 'U':vocab['U'], 'G':vocab['G'], 'C':vocab['C']}
+
+    def _id2base(tid: int) -> str:
+        return id_to_token[int(tid)].upper()
+
+    seq: List[str] = []
+    forced: List[str] = [None] * L  
+
+    while len(seq) < L:
+        if input_ids.shape[1] >= ctx_len:
             break
 
+        pos = len(seq)
+        ch = target_structure[pos]
+        if forced[pos] is not None or ch == ')':
+            j = pair[pos]
+            if j == -1 or j >= len(seq):
+                raise RuntimeError(f"Pairing order error at pos {pos}")
+            base = forced[pos] if forced[pos] is not None else _comp(seq[j])
+            token_id = base_to_id[base]
 
-        next_token_tensor = torch.tensor([[token_id]], dtype=torch.long, device=input_ids.device)
-        input_ids = torch.cat([input_ids, next_token_tensor], dim=1)
+        else:
+            logits_full = model(input_ids)[:, -1, :]         
+            sub_logits = logits_full[:, allowed_idxs]       
+            if top_k <= 1:
+                sub_idx = torch.argmax(sub_logits, dim=-1).item()
+            else:
+                sub_logits = sub_logits / max(temperature, 1e-6)
+                sub_probs = torch.nn.functional.softmax(sub_logits, dim=-1)  # (1,4)
+                k = min(top_k, 4)
+                topk_probs, topk_indices = torch.topk(sub_probs, k=k, dim=-1)
+                topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
+                sub_idx = topk_indices[0, torch.multinomial(topk_probs, 1).item()].item()
 
-    return rna_seq
+            token_id = allowed_idxs[sub_idx]
+            base = _id2base(token_id)
+            if base not in ('A','U','G','C'):
+                raise RuntimeError(f"Sampled non-AUGC token: {base!r}")
+
+        # 写入当前位置
+        seq.append(base)
+        input_ids = torch.cat(
+            [input_ids, torch.tensor([[base_to_id[base]]], dtype=torch.long, device=device)],
+            dim=1
+        )
+
+        if ch == '(':
+            j = pair[pos]
+            if j != -1:
+                forced[j] = _comp(base)
+    fixed = 0
+    seq_list = list(seq[:L])
+    for i, ch in enumerate(target_structure):
+        if ch == '(':
+            j = pair[i]
+            if j == -1:
+                continue
+            if j >= len(seq_list):
+                continue
+            want = _comp(seq_list[i])
+            if seq_list[j] != want:
+                fixed += 1
+                seq_list[j] = want
+    if fixed > 0:
+        print(f"[postcheck] fixed {fixed} mismatched pair(s).")
+
+    return ''.join(seq_list)
 def load_model(args):
     
 
