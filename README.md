@@ -6,7 +6,6 @@ This project is focused on inverse folding using the RWKV model. It includes var
 
 - `baseline_rnainverse.py`: Baseline script for RNA inverse folding.
 - `train.py`: Script for training the model.
-- `rna_train.json` and `rna_test.json`: JSON files for training and testing data.
 - `requirements.txt`: Python dependencies.
 - `rna_generate.py`: Script for RNA sequence generation.
 - `inference.py`: Script for running inference.
