@@ -1308,43 +1308,40 @@ class RWKV(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         args = self.args
+        PAD_ID = -100  # 用作忽略标签的ID（PyTorch默认）
+    
         if args.my_qa_mask != 1:
+            # 普通分支：不使用mask
             idx, targets = batch
             logits = self(idx)
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
-            # if '0' in os.environ["RWKV_MY_TESTING"]:
-            #     print('logits', logits)
-            #     torch.set_printoptions(threshold=10000)
-            #     print('idx', idx)
-            #     exit(0)
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1)
+            )
         else:
+            # 带mask分支：把被mask掉的位置在targets里置为PAD_ID
             idx, targets, mask = batch
-            mask = mask.view(-1)
-            sum_mask = torch.sum(mask).item()
-            # if sum_mask == 0:
-            #     return torch.tensor([0.0], requires_grad=True)
-
             logits = self(idx)
-            if sum_mask == mask.shape[0]:
-                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
-                # print('rank', self.global_rank, 'loss', loss.item())
-            else:
-                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), reduction='none')
-                # loss_raw = loss
-                loss = torch.sum(loss * mask) / sum_mask
-
-                # torch.set_printoptions(threshold=10000)
-                # if True: #self.global_rank == 1:
-                #     tmp = ''
-                #     sss = 0
-                #     ccc = 0
-                #     for i in range(mask.shape[0]):
-                #         if mask[i] > 0:
-                #             tmp += str(idx.view(-1)[i].item()) + ','
-                #             sss += loss_raw.view(-1)[i].float().item()
-                #             ccc += 1
-                #     print('rank', self.global_rank, 'loss', loss.item(), 'lavg', sss / ccc)#, 'tmp', tmp, 'input', idx)
-
+    
+            targets = targets.view(-1).clone()
+            mask    = mask.view(-1).bool()
+    
+            # 无效位置设为 PAD_ID，交给 CE 的 ignore_index 处理
+            targets[~mask] = PAD_ID
+    
+            # 可选：label smoothing 更稳，先用0.0或0.05~0.1按需调
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets,
+                ignore_index=PAD_ID,
+                # label_smoothing=0.1,
+            )
+    
+        # 额外的数值防护（可选）：避免把NaN/Inf传给自定义autograd
+        if torch.isnan(loss) or torch.isinf(loss):
+            # 返回与图相连的0，阻断坏梯度
+            loss = logits.sum() * 0.0
+    
         return L2Wrap.apply(loss, logits)
 
     def training_step_end(self, batch_parts):
