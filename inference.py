@@ -236,7 +236,7 @@ def load_model(args):
             max_p = None
             chosen = None
             if getattr(args, "load_model", None):
-                lm = os.path.expanduser(str(args.load_model))
+                lm = os.path.expanduser(str(args.proj_dir)+'/'+str(args.load_model))
                 if os.path.exists(lm):
                     chosen = lm
                     base = os.path.basename(lm)
@@ -624,7 +624,7 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 best_result = None
-                for attempt in range(10):
+                for attempt in range(1):
                     pred_seq = generate_rna_sequence(
                         model, input_ids, rna_tokens, vocab, id_to_token,
                         args.ctx_len, args.topk, args.temperature,
