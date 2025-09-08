@@ -1,7 +1,0 @@
-{
-  "num_samples": 100,
-  "average_correct_rate": 0.9428585038757541,
-  "average_edit_distance": 11.17,
-  "full_match_accuracy": 0.45,
-  "gc_content": 0.45372263183618705
-}
