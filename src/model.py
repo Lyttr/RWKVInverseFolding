@@ -51,9 +51,10 @@ if 'x070' in os.environ["RWKV_MY_TESTING"]:
         @staticmethod
         def forward(ctx, w,q,k,v,z,b):
             B,T,H,C = w.shape 
-            assert T%CHUNK_LEN == 0
-            assert all(i.dtype==torch.bfloat16 for i in [w,q,k,v,z,b])
-            assert all(i.is_contiguous() for i in [w,q,k,v,z,b])
+            assert T % CHUNK_LEN == 0, f"T({T}) % CHUNK_LEN({CHUNK_LEN}) != 0"
+            assert all(i.dtype == torch.bfloat16 for i in [w,q,k,v,z,b]), f"dtypes={[i.dtype for i in [w,q,k,v,z,b]]} (expect bfloat16)"
+            assert all(i.is_contiguous() for i in [w,q,k,v,z,b]), "inputs must be contiguous"
+            assert C == 64, f"C={C} (expect 64)"
             y = torch.empty_like(v)
             s = torch.empty(B,H,T//CHUNK_LEN,C,C, dtype=torch.float32,device=w.device)
             sa = torch.empty(B,T,H,C, dtype=torch.float32,device=w.device)
@@ -62,8 +63,7 @@ if 'x070' in os.environ["RWKV_MY_TESTING"]:
             return y
         @staticmethod
         def backward(ctx, dy):
-            assert all(i.dtype==torch.bfloat16 for i in [dy])
-            assert all(i.is_contiguous() for i in [dy])
+            assert dy.dtype == torch.bfloat16 and dy.is_contiguous(), f"dy dtype/contiguous invalid: {dy.dtype}, {dy.is_contiguous()}"
             w,q,k,v,z,b,s,sa = ctx.saved_tensors
             dw,dq,dk,dv,dz,db = [torch.empty_like(x) for x in [w,q,k,v,z,b]]
             torch.ops.wind_backstepping.backward(w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
@@ -1308,10 +1308,10 @@ class RWKV(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         args = self.args
-        PAD_ID = -100  # 用作忽略标签的ID（PyTorch默认）
+        PAD_ID = -100  
     
         if args.my_qa_mask != 1:
-            # 普通分支：不使用mask
+         
             idx, targets = batch
             logits = self(idx)
             loss = F.cross_entropy(
@@ -1319,27 +1319,23 @@ class RWKV(pl.LightningModule):
                 targets.view(-1)
             )
         else:
-            # 带mask分支：把被mask掉的位置在targets里置为PAD_ID
+          
             idx, targets, mask = batch
             logits = self(idx)
     
             targets = targets.view(-1).clone()
             mask    = mask.view(-1).bool()
     
-            # 无效位置设为 PAD_ID，交给 CE 的 ignore_index 处理
+           
             targets[~mask] = PAD_ID
     
-            # 可选：label smoothing 更稳，先用0.0或0.05~0.1按需调
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)),
                 targets,
                 ignore_index=PAD_ID,
-                # label_smoothing=0.1,
+
             )
-    
-        # 额外的数值防护（可选）：避免把NaN/Inf传给自定义autograd
         if torch.isnan(loss) or torch.isinf(loss):
-            # 返回与图相连的0，阻断坏梯度
             loss = logits.sum() * 0.0
     
         return L2Wrap.apply(loss, logits)

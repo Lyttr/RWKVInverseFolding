@@ -4,25 +4,36 @@
 
 import logging
 logging.basicConfig(level=logging.INFO)
-def collate_varlen(batch, pad_id: int = 8):
+import torch
+from typing import List, Tuple
+
+def collate_varlen(
+    batch: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+    pad_id: int = 8,
+    multiple: int = 16
+):
+
     B = len(batch)
     lens = [x[0].size(0) for x in batch]
-    Tm  = max(lens)
+    Tm = max(lens)
+    Tfinal = ((Tm + 16 - 1) // 16) * 16 
 
-    def pad_1d(x, value):
-        if x.size(0) == Tm:
+    def pad_1d(x: torch.Tensor, value, T: int):
+        if x.size(0) == T:
             return x
-        out = x.new_full((Tm,), value)
+        out = x.new_full((T,), value)
         out[:x.size(0)] = x
         return out
 
     inputs, labels, masks = [], [], []
     for inp, lab, m in batch:
-        inputs.append(pad_1d(inp, pad_id))
-        labels.append(pad_1d(lab, pad_id))
-        masks.append(pad_1d(m, 0.0))
+        inputs.append(pad_1d(inp, pad_id, Tfinal))               
+        labels.append(pad_1d(lab, pad_id, Tfinal))         
+        masks.append(pad_1d(m.to(torch.float32), 0.0, Tfinal))   
 
-    return torch.stack(inputs, 0), torch.stack(labels, 0), torch.stack(masks, 0)  # [B, Tm]
+    
+    return torch.stack(inputs, 0).contiguous(),torch.stack(labels, 0).contiguous(),torch.stack(masks, 0).contiguous()               
+            
 if __name__ == "__main__":
     from argparse import ArgumentParser
     from pytorch_lightning import Trainer
