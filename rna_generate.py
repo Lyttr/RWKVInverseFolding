@@ -182,16 +182,15 @@ def main():
     parser = argparse.ArgumentParser(
       
     )
-    parser.add_argument("--output_dir", type=str, default="/pvc/dataset/8M0907")
+    parser.add_argument("--output_dir", type=str, default="/pvc/dataset/16M0913")
     parser.add_argument("--testraw_path", type=str, default="eterna100_puzzles.tsv")
-    parser.add_argument("--train_size", type=int, default=8_000_000)
+    parser.add_argument("--train_size", type=int, default=16_000_000)
     parser.add_argument("--chunk_size", type=int, default=10_000)
     parser.add_argument("--min_len", type=int, default=12)
     parser.add_argument("--max_len", type=int, default=400)
     parser.add_argument("--num_threads", type=int, default=32)
     parser.add_argument("--rnafold_cmd", type=str, default="RNAfold")
     parser.add_argument("--ctx_len", type=int, default=1024)
-    parser.add_argument("--remove_chunks_after_merge", action="store_true")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -219,15 +218,15 @@ def main():
         ctx_len=args.ctx_len
     )
 
-    if args.remove_chunks_after_merge:
-        chunks_dir = os.path.join(args.output_dir, "train_chunks")
-        print(f"[cleanup] removing chunks under {chunks_dir} ...")
-        for f in os.listdir(chunks_dir):
-            if f.endswith(".npy"):
-                try:
-                    os.remove(os.path.join(chunks_dir, f))
-                except Exception as e:
-                    print(f"[warn] failed to remove {f}: {e}")
+ 
+    chunks_dir = os.path.join(args.output_dir, "train_chunks")
+    print(f"[cleanup] removing chunks under {chunks_dir} ...")
+    for f in os.listdir(chunks_dir):
+        if f.endswith(".npy"):
+            try:
+                os.remove(os.path.join(chunks_dir, f))
+            except Exception as e:
+                print(f"[warn] failed to remove {f}: {e}")
 
 if __name__ == "__main__":
     main()
